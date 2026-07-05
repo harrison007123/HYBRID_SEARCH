@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knowledge Base - Hybrid Search</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at 50% 0%, #1e293b 0%, #0f172a 70%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        header h1 {
+            font-weight: 800;
+            font-size: 2.5rem;
+            background: linear-gradient(90deg, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+            margin-bottom: 30px;
+            transition: transform 0.3s ease;
+        }
+
+        /* Upload Section */
+        .upload-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border: 2px dashed var(--glass-border);
+            padding: 40px 20px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .upload-section:hover, .upload-section.dragover {
+            border-color: var(--primary);
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .upload-section input[type="file"] {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        /* Search Section */
+        .search-section {
+            display: flex;
+            gap: 10px;
+        }
+
+        .search-section input {
+            flex: 1;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--glass-border);
+            padding: 16px 20px;
+            border-radius: 12px;
+            color: white;
+            font-size: 1.1rem;
+            outline: none;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .search-section input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .search-section button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0 30px;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .search-section button:hover {
+            background: var(--primary-hover);
+        }
+
+        /* Results */
+        .results-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .result-card {
+            display: flex;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .result-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(255,255,255,0.2);
+            box-shadow: 0 15px 35px -10px rgba(0, 0, 0, 0.6);
+        }
+
+        .rank-badge {
+            background: var(--primary);
+            color: white;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            font-weight: 800;
+            font-size: 1.2rem;
+            margin-right: 20px;
+            flex-shrink: 0;
+        }
+
+        .result-content {
+            flex: 1;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .result-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .result-score {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            background: rgba(0,0,0,0.3);
+            padding: 4px 10px;
+            border-radius: 20px;
+        }
+
+        .result-snippet {
+            color: var(--text-muted);
+            line-height: 1.6;
+            font-size: 0.95rem;
+            display: -webkit-box;
+            -webkit-line-clamp: 3; /* Limit snippet to 3 lines */
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Loading Spinner */
+        .loader {
+            display: none;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Knowledge Base</h1>
+            <p>Upload PDFs and search across your common document pool</p>
+        </header>
+
+        <!-- Upload Panel -->
+        <div class="glass-panel">
+            <div class="upload-section" id="dropzone">
+                <input type="file" id="fileInput" accept="application/pdf">
+                <!-- Simple Upload Icon -->
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:10px;">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                <h3 style="color: #e2e8f0; font-weight:600;">Drop PDF here or click to upload</h3>
+                <p style="color: var(--text-muted); margin-top:5px; font-size: 0.9rem;" id="uploadStatus">Instantly updates the search pool</p>
+                <div class="loader" id="uploadLoader" style="margin-top: 15px;"></div>
+            </div>
+        </div>
+
+        <!-- Search Panel -->
+        <div class="glass-panel search-section">
+            <input type="text" id="searchInput" placeholder="Ask a question about your documents..." onkeypress="if(event.key === 'Enter') performSearch()">
+            <button onclick="performSearch()" id="searchBtn">Search</button>
+        </div>
+
+        <!-- Results Area -->
+        <div id="resultsArea" class="results-container">
+            <!-- Results injected here via JS -->
+            <div class="loader hidden" id="searchLoader" style="margin: 30px auto; width:40px; height:40px;"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- Upload Logic ---
+        const fileInput = document.getElementById('fileInput');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const uploadLoader = document.getElementById('uploadLoader');
+        const dropzone = document.getElementById('dropzone');
+
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+        
+        dropzone.addEventListener('dragleave', () => {
+            dropzone.classList.remove('dragover');
+        });
+        
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                handleUpload();
+            }
+        });
+        
+        fileInput.addEventListener('change', handleUpload);
+
+        async function handleUpload() {
+            if (!fileInput.files.length) return;
+            const file = fileInput.files[0];
+            
+            if (!file.name.toLowerCase().endsWith('.pdf')) {
+                uploadStatus.textContent = '❌ Please select a PDF file.';
+                uploadStatus.style.color = '#ef4444';
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            uploadStatus.textContent = `Uploading and processing ${file.name}...`;
+            uploadStatus.style.color = 'var(--text-muted)';
+            uploadLoader.style.display = 'block';
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    uploadStatus.textContent = `✅ Success! Ingested ${data.chunks_processed} chunks.`;
+                    uploadStatus.style.color = '#10b981';
+                } else {
+                    let errorMessage = "Unknown server error";
+                    const contentType = response.headers.get("content-type");
+                    if (contentType && contentType.includes("application/json")) {
+                        const data = await response.json();
+                        errorMessage = data.detail || JSON.stringify(data);
+                    } else {
+                        errorMessage = await response.text();
+                    }
+                    uploadStatus.textContent = `❌ Error: ${errorMessage}`;
+                    uploadStatus.style.color = '#ef4444';
+                }
+            } catch (err) {
+                console.error(err);
+                uploadStatus.textContent = `❌ Upload failed: ${err.message}`;
+                uploadStatus.style.color = '#ef4444';
+            } finally {
+                uploadLoader.style.display = 'none';
+                fileInput.value = ''; // reset input
+            }
+        }
+
+        // --- Search Logic ---
+        async function performSearch() {
+            const query = document.getElementById('searchInput').value.trim();
+            if (!query) return;
+
+            const resultsArea = document.getElementById('resultsArea');
+            const searchBtn = document.getElementById('searchBtn');
+            const searchLoader = document.getElementById('searchLoader');
+
+            // UI Loading state
+            searchBtn.disabled = true;
+            searchBtn.style.opacity = '0.7';
+            
+            // Clear previous results but keep loader
+            Array.from(resultsArea.children).forEach(child => {
+                if(child.id !== 'searchLoader') child.remove();
+            });
+            searchLoader.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question: query, top_k: 5 })
+                });
+                
+                const results = await response.json();
+                searchLoader.classList.add('hidden');
+                
+                if (results.length === 0) {
+                    const noResults = document.createElement('div');
+                    noResults.className = "glass-panel";
+                    noResults.style = "text-align:center; color:var(--text-muted); padding:20px;";
+                    noResults.textContent = "No highly relevant results found.";
+                    resultsArea.appendChild(noResults);
+                    return;
+                }
+
+                results.forEach(res => {
+                    const card = document.createElement('a');
+                    card.href = res.file_url;
+                    card.target = "_blank"; // Opens the file endpoint in a new tab!
+                    card.className = "glass-panel result-card";
+                    
+                    card.innerHTML = `
+                        <div class="rank-badge">${res.rank}</div>
+                        <div class="result-content">
+                            <div class="result-header">
+                                <div class="result-title">${res.original_name}</div>
+                                <div class="result-score">Score: ${res.score}</div>
+                            </div>
+                            <div class="result-snippet">${res.snippet}</div>
+                        </div>
+                    `;
+                    resultsArea.appendChild(card);
+                });
+
+            } catch (err) {
+                searchLoader.classList.add('hidden');
+                const errorDiv = document.createElement('div');
+                errorDiv.className = "glass-panel";
+                errorDiv.style = "text-align:center; color:#ef4444; padding:20px;";
+                errorDiv.textContent = "❌ Failed to perform search. Is the server running?";
+                resultsArea.appendChild(errorDiv);
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.style.opacity = '1';
+            }
+        }
+    </script>
+</body>
+</html>

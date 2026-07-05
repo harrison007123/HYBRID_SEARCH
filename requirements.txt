@@ -3,3 +3,6 @@ qdrant-client
 pypdf
 python-dotenv
 fastembed
+fastapi
+uvicorn
+python-multipart
