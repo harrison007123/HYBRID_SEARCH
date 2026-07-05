@@ -12,7 +12,7 @@ load_dotenv()
 # Configure Gemini API
 api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
 if not api_key:
-    print("⚠️ GOOGLE_API_KEY environment variable not set. Please set it in your .env file.")
+    print("Warning: GOOGLE_API_KEY environment variable not set. Please set it in your .env file.")
 
 genai.configure(api_key=api_key)
 embedding_model = "models/gemini-embedding-2"
@@ -23,7 +23,7 @@ sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
 
 # Drop existing collection to apply schema changes
 if client.collection_exists("my_documents"):
-    print("🗑️ Dropping old collection to update schema for hybrid search...")
+    print("Dropping old collection to update schema for hybrid search...")
     client.delete_collection("my_documents")
 
 # Create collection with hybrid search schema
@@ -61,7 +61,7 @@ def upload_document_to_qdrant(file_name, text_chunks):
     """
     Turns chunks into Gemini dense vectors + BM25 sparse vectors and saves them to Qdrant.
     """
-    print(f"📥 Processing: {file_name} ({len(text_chunks)} chunks)")
+    print(f"Processing: {file_name} ({len(text_chunks)} chunks)")
     
     # Pre-compute sparse embeddings
     sparse_embeddings = list(sparse_model.embed(text_chunks))
@@ -98,25 +98,25 @@ def upload_document_to_qdrant(file_name, text_chunks):
         points.append(point)
         
     client.upsert(collection_name="my_documents", points=points)
-    print(f"✅ Saved {len(text_chunks)} chunks from '{file_name}' to Qdrant.")
+    print(f"Saved {len(text_chunks)} chunks from '{file_name}' to Qdrant.")
 
 if __name__ == "__main__":
     docs_dir = "documents"
     
     if not os.path.exists(docs_dir):
-        print(f"❌ Could not find {docs_dir} directory.")
+        print(f"Error: Could not find {docs_dir} directory.")
     elif not api_key:
-        print("❌ Cannot run upload without GOOGLE_API_KEY.")
+        print("Error: Cannot run upload without GOOGLE_API_KEY.")
     else:
-        print("🚀 Starting PDF upload process (Hybrid Schema)...")
+        print("Starting PDF upload process (Hybrid Schema)...")
         for filename in os.listdir(docs_dir):
             if filename.lower().endswith(".pdf"):
                 pdf_path = os.path.join(docs_dir, filename)
-                print(f"\n📄 Extracting text from {pdf_path}...")
+                print(f"\nExtracting text from {pdf_path}...")
                 full_text = extract_text_from_pdf(pdf_path)
                 chunks = chunk_text(full_text)
                 
                 upload_document_to_qdrant(filename, chunks)
                 
-        print("\n🎉 All documents uploaded successfully!")
+        print("\nAll documents uploaded successfully!")
         client.close()

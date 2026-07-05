@@ -11,7 +11,7 @@ load_dotenv()
 # Configure Gemini API
 api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
 if not api_key:
-    print("⚠️ GOOGLE_API_KEY environment variable not set. Please set it in your .env file.")
+    print("Warning: GOOGLE_API_KEY environment variable not set. Please set it in your .env file.")
 
 genai.configure(api_key=api_key)
 
@@ -24,7 +24,7 @@ def search_document_hybrid(search_query, top_k=5):
     """
     Searches Qdrant using Hybrid Search (Reciprocal Rank Fusion of Dense + Sparse).
     """
-    print(f"\n🔍 Hybrid Searching for: '{search_query}'")
+    print(f"\nHybrid Searching for: '{search_query}'")
     
     # 1. Turn the user's question into a Dense Vector
     result = genai.embed_content(
@@ -72,23 +72,24 @@ def search_document_hybrid(search_query, top_k=5):
 
 
 # ==========================================
-# 🚀 TESTING THE WORKFLOW
+# TESTING THE WORKFLOW
 # ==========================================
 
 if __name__ == "__main__":
+    Score=0.5
     if not api_key:
-        print("❌ Cannot run test without GOOGLE_API_KEY.")
+        print("Error: Cannot run test without GOOGLE_API_KEY.")
     else:
-        question = "Who was struggling to carry heavy grocery bags?" 
+        question = "what was charlie watching" 
         
         matches = search_document_hybrid(question, top_k=5)
         
         if matches:
-            print(f"\n✨ Top Match Results:")
+            print(f"\nTop Match Results:")
             for i, match in enumerate(matches, 1):
                 if(match['score']>0.5):
                     print(f"{i}. Path: documents/{match['file_name']}  (Fusion Score: {match['score']:.4f})")
         else:
-            print("\n❌ No relevant documents found.")
+            print("\nNo relevant documents found.")
             
         client.close()
