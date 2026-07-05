@@ -83,7 +83,7 @@ if __name__ == "__main__":
     if not api_key:
         print("Error: Cannot run test without GOOGLE_API_KEY.")
     else:
-        question = "Where was Charlie standing while observing the clock?" 
+        question = "One evening, as the sun dipped below the horizon"
         
         matches = search_document_hybrid(question, top_k=5)
         
