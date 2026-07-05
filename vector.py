@@ -60,11 +60,14 @@ def search_document_hybrid(search_query, top_k=5):
         with_payload=True
     )
     
-    # 4. Extract and return the paths and scores
+    # 4. Extract and return the full payload and scores
     results = []
     for match in search_result.points:
         results.append({
-            "file_name": match.payload["file_name"],
+            "document_id": match.payload.get("document_id"),
+            "original_name": match.payload.get("original_name", match.payload.get("file_name", "unknown")),
+            "user_id": match.payload.get("user_id"),
+            "text_content": match.payload.get("text_content"),
             "score": match.score
         })
     
@@ -80,15 +83,17 @@ if __name__ == "__main__":
     if not api_key:
         print("Error: Cannot run test without GOOGLE_API_KEY.")
     else:
-        question = "what was charlie watching" 
+        question = "Where was Charlie standing while observing the clock?" 
         
         matches = search_document_hybrid(question, top_k=5)
         
         if matches:
             print(f"\nTop Match Results:")
             for i, match in enumerate(matches, 1):
-                if(match['score']>0.5):
-                    print(f"{i}. Path: documents/{match['file_name']}  (Fusion Score: {match['score']:.4f})")
+                if(match['score']>0.0):
+                    print(f"{i}. Document: {match['original_name']} (ID: {match['document_id']}, User: {match['user_id']})")
+                    print(f"   Fusion Score: {match['score']:.4f}")
+                    print(f"   Snippet: {match['text_content'][:150] if match['text_content'] else 'No content'}...\n")
         else:
             print("\nNo relevant documents found.")
             
