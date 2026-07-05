@@ -34,16 +34,5 @@ This is a local Retrieval-Augmented Generation (RAG) application that lets you "
    GOOGLE_API_KEY=your_api_key_here
    ```
 
-## Usage
 
-1. **Ingest Documents:** 
-   Place your PDF files in the `documents/` folder. Run the ingestion script to parse the PDFs, generate embeddings, and store them in the local Qdrant database:
-   ```bash
-   python upsert.py
-   ```
-   
-2. **Ask Questions:**
-   Modify the `question` variable at the bottom of `vector.py` to ask whatever you want, then run the script to query your documents:
-   ```bash
-   python vector.py
-   ```
+
