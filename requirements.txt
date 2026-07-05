@@ -2,3 +2,4 @@ google-generativeai
 qdrant-client
 pypdf
 python-dotenv
+fastembed

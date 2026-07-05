@@ -1,9 +1,10 @@
 import os
 import google.generativeai as genai
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
+from qdrant_client.models import Distance, VectorParams, SparseVectorParams, PointStruct, SparseVector
 from pypdf import PdfReader
 from dotenv import load_dotenv
+from fastembed import SparseTextEmbedding
 
 # Load environment variables from .env file
 load_dotenv()
@@ -16,15 +17,25 @@ if not api_key:
 genai.configure(api_key=api_key)
 embedding_model = "models/gemini-embedding-2"
 
-# Initialize Qdrant
+# Initialize Qdrant and Sparse Embedding model
 client = QdrantClient(path="./qdrant_db")
+sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
 
-# Create collection if it doesn't exist
-if not client.collection_exists("my_documents"):
-    client.create_collection(
-        collection_name="my_documents",
-        vectors_config=VectorParams(size=3072, distance=Distance.COSINE),
-    )
+# Drop existing collection to apply schema changes
+if client.collection_exists("my_documents"):
+    print("🗑️ Dropping old collection to update schema for hybrid search...")
+    client.delete_collection("my_documents")
+
+# Create collection with hybrid search schema
+client.create_collection(
+    collection_name="my_documents",
+    vectors_config={
+        "text-dense": VectorParams(size=3072, distance=Distance.COSINE)
+    },
+    sparse_vectors_config={
+        "text-sparse": SparseVectorParams()
+    }
+)
 
 def extract_text_from_pdf(pdf_path):
     """Reads a PDF and returns its text."""
@@ -48,23 +59,37 @@ def chunk_text(text, chunk_size=1000, overlap=100):
 
 def upload_document_to_qdrant(file_name, text_chunks):
     """
-    Turns chunks into Google GenAI vectors and saves them to Qdrant.
+    Turns chunks into Gemini dense vectors + BM25 sparse vectors and saves them to Qdrant.
     """
     print(f"📥 Processing: {file_name} ({len(text_chunks)} chunks)")
     
+    # Pre-compute sparse embeddings
+    sparse_embeddings = list(sparse_model.embed(text_chunks))
+
     points = []
     for i, chunk in enumerate(text_chunks):
+        # 1. Generate Dense Vector (Gemini)
         result = genai.embed_content(
             model=embedding_model,
             content=chunk
         )
-        vector = result['embedding']
+        dense_vector = result['embedding']
+        
+        # 2. Extract Sparse Vector (BM25)
+        sparse_result = sparse_embeddings[i]
+        sparse_vector = SparseVector(
+            indices=sparse_result.indices,
+            values=sparse_result.values
+        )
         
         point_id = hash(f"{file_name}_{i}") % (10**8) 
         
         point = PointStruct(
             id=point_id,
-            vector=vector,
+            vector={
+                "text-dense": dense_vector,
+                "text-sparse": sparse_vector
+            },
             payload={
                 "file_name": file_name,
                 "text_content": chunk
@@ -83,7 +108,7 @@ if __name__ == "__main__":
     elif not api_key:
         print("❌ Cannot run upload without GOOGLE_API_KEY.")
     else:
-        print("🚀 Starting PDF upload process...")
+        print("🚀 Starting PDF upload process (Hybrid Schema)...")
         for filename in os.listdir(docs_dir):
             if filename.lower().endswith(".pdf"):
                 pdf_path = os.path.join(docs_dir, filename)
