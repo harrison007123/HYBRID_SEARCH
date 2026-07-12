@@ -2,10 +2,9 @@ import os
 import uuid
 import google.generativeai as genai
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, SparseVectorParams, PointStruct, SparseVector
+from qdrant_client.models import Distance, VectorParams, PointStruct
 from pypdf import PdfReader
 from dotenv import load_dotenv
-from fastembed import SparseTextEmbedding
 
 # Load environment variables from .env file
 load_dotenv()
@@ -18,24 +17,18 @@ if not api_key:
 genai.configure(api_key=api_key)
 embedding_model = "models/gemini-embedding-2"
 
-# Initialize Qdrant and Sparse Embedding model
+# Initialize Qdrant
 client = QdrantClient(path="./qdrant_db")
-sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
 
 # Drop existing collection to apply schema changes
-if client.collection_exists("my_documents"):
-    print("🗑️ Dropping old collection to update schema for hybrid search...")
-    client.delete_collection("my_documents")
+if client.collection_exists("semantic_documents"):
+    print("🗑️ Dropping old collection to reset schema...")
+    client.delete_collection("semantic_documents")
 
-# Create collection with hybrid search schema
+# Create collection with semantic search schema
 client.create_collection(
-    collection_name="my_documents",
-    vectors_config={
-        "text-dense": VectorParams(size=3072, distance=Distance.COSINE)
-    },
-    sparse_vectors_config={
-        "text-sparse": SparseVectorParams()
-    }
+    collection_name="semantic_documents",
+    vectors_config=VectorParams(size=3072, distance=Distance.COSINE)
 )
 
 def extract_text_from_pdf(pdf_path):
@@ -60,12 +53,9 @@ def chunk_text(text, chunk_size=1000, overlap=100):
 
 def upload_document_to_qdrant(doc_id, original_name, text_chunks):
     """
-    Turns chunks into Gemini dense vectors + BM25 sparse vectors and saves them to Qdrant.
+    Turns chunks into Gemini dense vectors and saves them to Qdrant.
     """
     print(f"📥 Processing: {original_name} (ID: {doc_id}) ({len(text_chunks)} chunks)")
-    
-    # Pre-compute sparse embeddings
-    sparse_embeddings = list(sparse_model.embed(text_chunks))
 
     points = []
     for i, chunk in enumerate(text_chunks):
@@ -76,21 +66,11 @@ def upload_document_to_qdrant(doc_id, original_name, text_chunks):
         )
         dense_vector = result['embedding']
         
-        # 2. Extract Sparse Vector (BM25)
-        sparse_result = sparse_embeddings[i]
-        sparse_vector = SparseVector(
-            indices=sparse_result.indices,
-            values=sparse_result.values
-        )
-        
         point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}_{i}")) 
         
         point = PointStruct(
             id=point_id,
-            vector={
-                "text-dense": dense_vector,
-                "text-sparse": sparse_vector
-            },
+            vector=dense_vector,
             payload={
                 "document_id": doc_id,
                 "original_name": original_name,
@@ -100,7 +80,7 @@ def upload_document_to_qdrant(doc_id, original_name, text_chunks):
         )
         points.append(point)
         
-    client.upsert(collection_name="my_documents", points=points)
+    client.upsert(collection_name="semantic_documents", points=points)
     print(f"✅ Saved {len(text_chunks)} chunks from '{original_name}' to Qdrant.")
 
 if __name__ == "__main__":
@@ -111,7 +91,7 @@ if __name__ == "__main__":
     elif not api_key:
         print("❌ Cannot run upload without GOOGLE_API_KEY.")
     else:
-        print("🚀 Starting PDF upload process (Hybrid Schema)...")
+        print("🚀 Starting PDF upload process (Semantic Schema)...")
         for filename in os.listdir(docs_dir):
             if filename.lower().endswith(".pdf"):
                 pdf_path = os.path.join(docs_dir, filename)

@@ -5,10 +5,9 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, SparseVectorParams, PointStruct, SparseVector, Prefetch, FusionQuery, Fusion
+from qdrant_client.models import Distance, VectorParams, PointStruct
 from pypdf import PdfReader
 from dotenv import load_dotenv
-from fastembed import SparseTextEmbedding
 
 # Load environment variables
 load_dotenv()
@@ -24,26 +23,19 @@ embedding_model = "models/gemini-embedding-2"
 from contextlib import asynccontextmanager
 
 client = None
-sparse_model = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global client, sparse_model
-    # Initialize Qdrant and Sparse Embedding model
+    global client
+    # Initialize Qdrant
     client = QdrantClient(path="./qdrant_db")
-    sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
 
     # Create collection only if it doesn't exist
-    if not client.collection_exists("my_documents"):
-        print("Creating 'my_documents' collection in Qdrant...")
+    if not client.collection_exists("semantic_documents"):
+        print("Creating 'semantic_documents' collection in Qdrant...")
         client.create_collection(
-            collection_name="my_documents",
-            vectors_config={
-                "text-dense": VectorParams(size=3072, distance=Distance.COSINE)
-            },
-            sparse_vectors_config={
-                "text-sparse": SparseVectorParams()
-            }
+            collection_name="semantic_documents",
+            vectors_config=VectorParams(size=3072, distance=Distance.COSINE)
         )
     yield
     client.close()
@@ -72,7 +64,7 @@ def chunk_text(text, chunk_size=1000, overlap=100):
     return chunks
 
 # Initialize FastAPI app
-app = FastAPI(title="Local RAG API", lifespan=lifespan)
+app = FastAPI(title="Local RAG API (Semantic)", lifespan=lifespan)
 
 class SearchQuery(BaseModel):
     question: str
@@ -103,7 +95,6 @@ async def upload_document(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="No readable text found in PDF.")
         
     # 3. Embed and upload to Qdrant
-    sparse_embeddings = list(sparse_model.embed(text_chunks))
     points = []
     
     for i, chunk in enumerate(text_chunks):
@@ -111,21 +102,11 @@ async def upload_document(file: UploadFile = File(...)):
         result = genai.embed_content(model=embedding_model, content=chunk)
         dense_vector = result['embedding']
         
-        # Sparse vector
-        sparse_result = sparse_embeddings[i]
-        sparse_vector = SparseVector(
-            indices=sparse_result.indices,
-            values=sparse_result.values
-        )
-        
         point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_id}_{i}")) 
         
         points.append(PointStruct(
             id=point_id,
-            vector={
-                "text-dense": dense_vector,
-                "text-sparse": sparse_vector
-            },
+            vector=dense_vector,
             payload={
                 "document_id": doc_id,
                 "original_name": original_name,
@@ -134,7 +115,7 @@ async def upload_document(file: UploadFile = File(...)):
             }
         ))
         
-    client.upsert(collection_name="my_documents", points=points)
+    client.upsert(collection_name="semantic_documents", points=points)
     
     return {
         "message": "File successfully uploaded and processed.",
@@ -152,39 +133,29 @@ async def search_documents(query: SearchQuery):
     result = genai.embed_content(model=embedding_model, content=search_query)
     dense_query_vector = result['embedding']
     
-    # 2. Sparse Query
-    sparse_result = list(sparse_model.query_embed(search_query))[0]
-    sparse_query_vector = SparseVector(
-        indices=sparse_result.indices,
-        values=sparse_result.values
-    )
-    
-    # 3. Qdrant RRF Search
+    # 2. Qdrant Semantic Search
     search_result = client.query_points(
-        collection_name="my_documents",
-        prefetch=[
-            Prefetch(query=dense_query_vector, using="text-dense", limit=top_k),
-            Prefetch(query=sparse_query_vector, using="text-sparse", limit=top_k)
-        ],
-        query=FusionQuery(fusion=Fusion.RRF),
+        collection_name="semantic_documents",
+        query=dense_query_vector,
         limit=top_k,
         with_payload=True
     )
     
-    # 4. Format Results
+    # 3. Format Results
     results = []
     for rank, match in enumerate(search_result.points, 1):
         if match.score > 0.0:
             doc_id = match.payload.get("document_id")
             original_name = match.payload.get("original_name", "unknown.pdf")
             internal_filename = match.payload.get("internal_filename", f"{doc_id}_{original_name}")
-
+            text_content = match.payload.get("text_content", "")
+            
             results.append({
                 "rank": rank,
                 "original_name": original_name,
                 "document_id": doc_id,
                 "file_url": f"/files/{internal_filename}",
-                "snippet": match.payload.get("text_content", ""),
+                "snippet": text_content,
                 "score": round(match.score, 4)
             })
             
@@ -202,7 +173,6 @@ async def get_file(internal_filename: str):
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found")
     
-    # Set headers so the browser opens it natively rather than downloading it (if possible)
     return FileResponse(file_path, media_type="application/pdf", headers={"Content-Disposition": "inline"})
 
 if __name__ == "__main__":
